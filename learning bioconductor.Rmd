@@ -1,0 +1,67 @@
+---
+title: "learning bioconductor"
+author: "Eric Yang"
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: yes
+    #number_sections: yes
+    #toc: yes
+classoption: "hyperref,"
+---
+
+# learning this book
+
+《Bioinfomatics and computational biology solutions using R and Bioconductor》
+
+## 2. 预处理 High-density Oligonucleotide Arrays
+
+### 2.1 原理与扫盲
+
++ Affymetrix就是HOA，由于此类芯片有多个probe，因此预处理(preprocessing)显得格外重要；一个gene用11-20个probe来检测
+
++ PM: 与目标gene的转录子配对，但别的mRNA也可能会与其配对
++ MM：目的在于配对与PM一样的gene
+
+### 2.2 importing probe-level data
++ CEL: import the cel files using `affy`包,转化为`AffyBatch`对象
+```{r}
+library(affy)
+
+```
+
++ CDF files: 包含信息->probe属于哪一个probesets，以及哪些是PM和MM
+
++ AffyBatch对象：一个s4 object，包含有如下slots：
+ ++ cdfName: 一个character，包含CDF file的信息
+ ++ nrow，ncol：array的维度
+ ++ assayData: 包含raw data的object，里面有expression矩阵
+ ++ phenoData: 一个AnnotatedDataFrame object,用来储存phenodata的信息
+
+```{r,}
+library(affydata)
+data(Dilution)
+
+pm(Dilution, '1001_at')[1:3,]
+
+matplot(pm(Dilution, '1001_at'), type = 'l', xlab = "Probe No.", ylab = "PM Probe intensity")
+
+matplot(t(pm(Dilution, '1001_at')), type = 'l', xlab = "Array No.", ylab = "PM Probe intensity")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
