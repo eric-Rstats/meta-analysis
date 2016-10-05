@@ -18,12 +18,12 @@ classoption: "hyperref,"
 
 ### 2.1 原理与扫盲
 
+#### 文件与AffyBatch对象
 + Affymetrix就是HOA，由于此类芯片有多个probe，因此预处理(preprocessing)显得格外重要；一个gene用11-20个probe来检测
 
 + PM: 与目标gene的转录子配对，但别的mRNA也可能会与其配对
 + MM：目的在于配对与PM一样的gene
 
-### 2.2 importing probe-level data
 + CEL: import the cel files using `affy`包,转化为`AffyBatch`对象
 ```{r}
 library(affy)
@@ -33,10 +33,19 @@ library(affy)
 + CDF files: 包含信息->probe属于哪一个probesets，以及哪些是PM和MM
 
 + AffyBatch对象：一个s4 object，包含有如下slots：
- ++ cdfName: 一个character，包含CDF file的信息
- ++ nrow，ncol：array的维度
- ++ assayData: 包含raw data的object，里面有expression矩阵
- ++ phenoData: 一个AnnotatedDataFrame object,用来储存phenodata的信息
+ + cdfName: 一个character，包含CDF file的信息
+ 
+ + nrow，ncol：array的维度
+ 
+ + assayData: 包含raw data的object，里面有expression矩阵
+ 
+ + phenoData: 一个AnnotatedDataFrame object,用来储存phenodata的信息
+ 
+ + annotation: character,表示用来做annotation的信息
+ 
+ + featureData: Object of class AnnotatedDataFrame containing feature-level (e.g., probeset-level) information
+ 
+ + experimentData: Object of class "MIAME" containing experiment-level information
 
 ```{r,}
 library(affydata)
@@ -50,17 +59,62 @@ matplot(t(pm(Dilution, '1001_at')), type = 'l', xlab = "Array No.", ylab = "PM P
 ```
 
 
+#### MA-plot：用来比较两个芯片之间的差异
+
++ M: $M_j=Y_{2,j}-Y_{1,j}$;当y是log后的值时，M可以理解为log fold change
++ A: $A_j=(Y_{2,j}+Y_{1,j})/2$;A可以理解为average log intensity
+
++ affy包中MAplot的两种函数：
+ + `MAplot`: 以中位数作为reference,关于每一个array绘图
+ + `mva.pairs`: 绘制所有pair-wise，就会产生一个类似于相关矩阵的图
+
+```{r}
+mva.pairs(Dilution@assayData$exprs)
+
+MAplot(Dilution)
+```
 
 
+蓝线表示的是M=0，而红线则表示局部多项式回归(loess)的结果，倘若基因间没有明显差异，红线应该较为接近蓝线。
 
 
+### 2.2 Background adjustment and normalization
+
+#### 2.2.1 Background adjustment
+
++ RMA convolution: PM will be corrected
+
+```{r}
+Dilution.bg.rma <- bg.correct(Dilution, method = 'rma')
+```
+
++ MAS 5.0 : correct both PM and MM
+
+```{r}
+Dilution.bg.mas <- bg.correct(Dilution, method = 'mas')
+
+```
+
++ Ideal mismatch :很多时候PM-MM为负值了，这就不能再接下去计算；计算IM对PM进行调整
+
+#### 2.2.2 normalization
+
+通过标准化来消除各个array之间的差异，让他们可以进行比较；
+
++ scaling: 选定一个baseline array，其余array均scaled成和它一样的均值；此处的均值计算时是使用截尾均值，头尾2%
+
+baseline trimmed mean : $\tilde{X}_j$
+column i trimmed mean : $\tilde{X}_i$
+
+每一个y值 $Y_{ik}=Y_{ik}*\frac{\tilde{X}_j}{\tilde{X}_i}$
 
 
+```{r}
+Dilution.norm.scale <- normalize(Dilution, method = "constant")
+```
 
 
-
-
-
++ 
 
 
 
