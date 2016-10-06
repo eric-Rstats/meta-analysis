@@ -22,15 +22,17 @@ classoption: "hyperref,"
 + Affymetrix就是HOA，由于此类芯片有多个probe，因此预处理(preprocessing)显得格外重要；一个gene用11-20个probe来检测
 
 + PM: 与目标gene的转录子配对，但别的mRNA也可能会与其配对
-+ MM：目的在于配对与PM一样的gene
-
++ MM：one base mismatch 
++ probe pair: a unit with PM and its MM
++ affyID: identification for a probe set(a gene or a fraction of a gene)
++ probe pair set:PMs and MMs 对应于同一affyID
 + CEL: import the cel files using `affy`包,转化为`AffyBatch`对象
 ```{r}
 library(affy)
 
 ```
 
-+ CDF files: 包含信息->probe属于哪一个probesets，以及哪些是PM和MM
++ CDF files: contain the information relating probe pair sets to locations on the array.包含信息->probe属于哪一个probesets，以及哪些是PM和MM
 
 + AffyBatch对象：一个s4 object，包含有如下slots：
  + cdfName: 一个character，包含CDF file的信息
@@ -114,7 +116,200 @@ Dilution.norm.scale <- normalize(Dilution, method = "constant")
 ```
 
 
-+ 
++ Non-linear methods:
+```{r}
+Dilution.norm.nl <- normalize(Dilution, method = "invariantset")
+```
+
++ Quantile normalization:
+
+```{r}
+Dilution.norm.quantile <- normalize(Dilution, method = "quantiles")
+```
+
++ Cyclic loess:
+```{r}
+Dilution.norm.loess <- normalize(Dilution, method = "loess")
+```
+
++ contrast normalization:
+```{r}
+Dilution.norm.contrast <- normalize(Dilution,method = "contrast")
+```
+
+#### 2.2.3 vsn
+*vsn* 整合background correction and normalization
+```{r}
+library(vsn)
+Dil.vsn <- normalize(Dilution, method = 'vsn')
+```
+
+### 2.3 Summarization
+这是一个将probeset中多个probe的intensity转化为expression value的过程；
+同时将`AffyBatch`对象转化为`exprSet`对象。
+
+#### 2.3.1 expresso
+
+```{r}
+normalize.methods(Dilution) # 所有normalize的methods
+pmcorrect.methods()
+bgcorrect.methods()
+express.summary.stat.methods()
+```
+
+在expresso函数中，可以在arguments中向后声明以上的这些方法。例如：
+```{r}
+eset <- expresso(Dilution, bgcorrect.method = 'rma', normalize.method = 'constant', pmcorrect.method = "pmonly", summary.method = "avgdiff")
+```
+
+上面依次是，background adjustment 使用rma，normalize使用的是scaling，pmcorrect的方法是pmonly，summary的方法是averaging
+
+#### 2.3.2 threestep
+区别：expresso不会取log2，threestep会取log2
+
+```{r, eval=FALSE}
+library(affyPLM)
+eset <- threestep(Dilution, background.method = "IdealMM", normalize.method = "quantile", summary.method = "tukey.biweight")
+```
+
+#### 2.3.3 RMA
+
+convolution background correction->quantile normalization->summarizatoin using median polish algorithm
+
+```{r,eval=FALSE}
+eset <- rma(Dilution)
+```
+
+这个结果已经取过log2了
+`justRMA`将ReadAffy和rma函数整合起来了，会节省一些内存
+
+#### 2.3.4 GCRMA
+
+```{r}
+library(gcrma)
+Dil.expr <- gcrma(Dilution)
+```
+
+#### 2.3.5 affypdnn
+```{r,eval=FALSE}
+library("affypdnn")
+```
+
+### 2.4 Assessing preprocessing methods
+如何决定使用何种预处理方法的组合很重要！
+
+```{r}
+library(affycomp)
+data("dilution.phenodata")
+data("spikein.phenodata")
+data("hgu133a.spikein.phenodata")
+
+```
+
+## 3. quality assessment
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 实践：利用affy包进行preprocessing
+```{r}
+library(affy)
+# background correaction methods
+bgcorrect.methods()
+# normalize methods
+normalize.AffyBatch.methods()
+# PM correct methods
+pmcorrect.methods()
+# summarization methods
+express.summary.stat.methods()
+```
+
+
+1.读取路径中的所有cel文件
+```{r}
+pwd <- "E:/生物统计/meta-analysis/testdata/1332168401_copd_CELfiles/copd_data"
+rawdata <- ReadAffy(celfile.path = pwd)
+```
+
+2. 预处理：background correction,normalization,probe specific correction,summarization
+
++ `expresso`: 可以在
+```{r}
+eset <- expresso(rawdata, bgcorrect.method = 'rma', 
+                 normalize.method = "qspline",
+                 pmcorrect.method = "pmonly", 
+                 summary.method = "mas")
+```
+
+至于存在的方法有
+```{r}
+bgcorrect.methods()
+normalize.methods()
+pmcorrect.methods()
+express.summary.stat.methods()
+```
+
++ mas 5.0
+```{r,eval=FALSE}
+eset <- mas5(rawdata)
+```
+
++ li wong MBEI (dchip)
+```{r,eval=FALSE}
+eset <- expresso(Dilution, normalize.method="invariantset",
+                  bg.correct=FALSE,
+                  pmcorrect.method="pmonly",summary.method="liwong")
+```
+
++ RMA:Robust Multichip Average
+
+Currently the rma function implements RMA in the following manner
+1. Probe specific correction of the PM probes using a model based on observed in-
+tensity being the sum of signal and noise
+2. Normalization of corrected PM probes using quantile normalization (Bolstad et al.,
+2003)
+3. Calculation of Expression measure using median polish.
+
+```{r}
+eset <- rma(rawdata)
+eset@assayData$exprs[1:5,1:5]
+```
+
+由上面的输出结果可以看出表达矩阵的列是一个芯片，行是affyID
+
+3. quality control
+
+
+
+
+
+
+
+
+
+
+
 
 
 
