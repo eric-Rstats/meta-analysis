@@ -22,7 +22,7 @@ classoption: "hyperref,"
 + Affymetrix就是HOA，由于此类芯片有多个probe，因此预处理(preprocessing)显得格外重要；一个gene用11-20个probe来检测
 
 + PM: 与目标gene的转录子配对，但别的mRNA也可能会与其配对
-+ MM：one base mismatch 
++ MM：one base mismatch
 + probe pair: a unit with PM and its MM
 + affyID: identification for a probe set(a gene or a fraction of a gene)
 + probe pair set:PMs and MMs 对应于同一affyID
@@ -36,17 +36,17 @@ library(affy)
 
 + AffyBatch对象：一个s4 object，包含有如下slots：
  + cdfName: 一个character，包含CDF file的信息
- 
+
  + nrow，ncol：array的维度
- 
+
  + assayData: 包含raw data的object，里面有expression矩阵
- 
+
  + phenoData: 一个AnnotatedDataFrame object,用来储存phenodata的信息
- 
+
  + annotation: character,表示用来做annotation的信息
- 
+
  + featureData: Object of class AnnotatedDataFrame containing feature-level (e.g., probeset-level) information
- 
+
  + experimentData: Object of class "MIAME" containing experiment-level information
 
 ```{r,}
@@ -302,9 +302,9 @@ rawdata <- ReadAffy(celfile.path = pwd)
 
 + `expresso`: 可以在
 ```{r}
-eset <- expresso(rawdata, bgcorrect.method = 'rma', 
+eset <- expresso(rawdata, bgcorrect.method = 'rma',
                  normalize.method = "qspline",
-                 pmcorrect.method = "pmonly", 
+                 pmcorrect.method = "pmonly",
                  summary.method = "mas")
 ```
 
@@ -442,10 +442,4 @@ Index$`100_g_at`
 pmindex(Dilution, genenames = c("1000_at", "1001_at"))
 ```
 
-
-
-
-
-
-
-
++ jjkasj
