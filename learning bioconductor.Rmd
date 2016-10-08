@@ -27,7 +27,7 @@ classoption: "hyperref,"
 + affyID: identification for a probe set(a gene or a fraction of a gene)
 + probe pair set:PMs and MMs 对应于同一affyID
 + CEL: import the cel files using `affy`包,转化为`AffyBatch`对象
-```{r}
+```{r,message=FALSE}
 library(affy)
 
 ```
@@ -49,7 +49,7 @@ library(affy)
  
  + experimentData: Object of class "MIAME" containing experiment-level information
 
-```{r,}
+```{r,message=FALSE}
 library(affydata)
 data(Dilution)
 
@@ -185,7 +185,7 @@ eset <- rma(Dilution)
 
 #### 2.3.4 GCRMA
 
-```{r}
+```{r,message=FALSE}
 library(gcrma)
 Dil.expr <- gcrma(Dilution)
 ```
@@ -198,7 +198,7 @@ library("affypdnn")
 ### 2.4 Assessing preprocessing methods
 如何决定使用何种预处理方法的组合很重要！
 
-```{r}
+```{r,message=FALSE}
 library(affycomp)
 data("dilution.phenodata")
 data("spikein.phenodata")
@@ -207,7 +207,11 @@ data("hgu133a.spikein.phenodata")
 ```
 
 ## 3. quality assessment
-```{r}
+在分析中可以考虑使用下面的包：
++ two-color platform:`arrayMagic`包
++ Affymetrix: `affyPLM`包,`Simpleaffy`包
+
+```{r,message=FALSE}
 library(affy)
 library(ALLMLL)
 data(MLL.B)
@@ -226,7 +230,7 @@ image(data[, 1], col = palette.gray) # log intensity
 
 #### 3.1.1 multi-array approches
 + 利用boxplot查看芯片质量
-```{r}
+```{r,message=FALSE}
 library(RColorBrewer)
 cols <- brewer.pal(8, "Set1")
 boxplot(data, col = cols)
@@ -247,22 +251,94 @@ mtext("M", 2, outer = T)
 mtext("A", 1, outer = T)
 ```
 
-### 3.2 Affymetrix quality assessment metrics
+### 3.2 (`Simpleaffy`包)Affymetrix quality assessment metrics
 
-```{r}
+qc函数返回：
++ Average Background
++ scale factor: normalize的时候每一个array乘上的乘数;准则是，彼此之间3fold以内
++ Percent present：Percentage probesets
++ 3' to 5' ratios:genechip有许多RNA quality control genes，因此这个比例可以作为RNA quality的衡量手段。
+
+```{r,message=FALSE}
 library(simpleaffy)
 data.qc <- qc(data)
 data.qc@average.background  # average background
-data.qc@scale.factors #scaled factors
+data.qc@scale.factors #scaled factors,f有问题
 data.qc@percent.present
 ratios(data.qc)[,1:2]
 ```
 
 ### 3.3 RNA degradation
 
-### 3.4 Probe level models
+### 3.4 using packages affyPLM
 
+fitPLM将AffyBatch转化为PLMset，通过建立一个特殊的robust regression
+```{r,message=FALSE}
+library(affyPLM)
+require(affydata)
+data(Dilution)
+Dilution <- updateObject(Dilution)
+Pset <- fitPLM(Dilution)
+```
 
+如何诊断呢？
+#### 3.4.1 chip pseudo-images
+
+```{r}
+image(Pset, which = 2, add.legend = TRUE) # dataset里第2个数据
+```
+
+Areas of low weight are greener, high weights (ie weight
+of 1) are light grey;
+
+```{r}
+options(width=40)
+image(Pset,which=2,col=gray(0:25/25),add.legend=TRUE)
+image(Pset,which=2,col=gray(25:0/25),add.legend=TRUE)
+```
+
+residuals是另一个可以拿来考量的性质；有四种:residuals,positive residuals,negative residuals,sign of residuals
+```{r}
+# 越红表示越大，白色接近于0，越蓝越低的negative resids
+image(Pset, which = 2, type = "resids") 
+
+# postive resids 是红色，其余都是白色
+image(Pset, which = 2, type = "pos.resids")#
+# negative resids 是蓝色，其余都是白色
+image(Pset, which = 2, type = "neg.resids")
+# 所有pos都是红色，所有neg都是蓝色，不论大小的差异
+image(Pset, which = 2, type = "sign.resids")
+```
+
+自定义颜色:
+```{r}
+image(Pset,which=2,type="resids",col=pseudoPalette(low="darkgreen",high="magenta",mid="lightgrey"),add.legend=TRUE)
+image(Pset,which=2,type="pos.resids",col=pseudoPalette(low="yellow",high="darkblue"),add.legend=TRUE)
+4
+```
+
+#### 3.4.2 RLE: Relative Log Expression (RLE) values.
+每一个array上的express vaue 减去对应probeset中所有array处的中位数
+```{r}
+RLE(Pset, main = "RLE for Dilution dataset")
+```
+质量差的芯片的特征自然就是：not centered to 0, more spread out
+
+```{r}
+RLE(Pset, type = "stats")
+```
+
+上面是stats值，若想要返回所有的RLE表达值：
+```{r,eval=FALSE}
+RLE(Pset, type = 'values')
+```
+
+#### 3.4.3 NUSE:Normalized Unscaled Standard Errors
+如果一个array上的SE值过高，则显然芯片的质量并不是很高
+```{r}
+NUSE(Pset, main = "NUSE for Dilution dataset")
+NUSE(Pset, type = "stats")
+```
 
 
 
