@@ -228,7 +228,7 @@ image(data[, 1], transfo = function(x) x, col = palette.gray) # raw intensity
 image(data[, 1], col = palette.gray) # log intensity
 ```
 
-#### 3.1.1 multi-array approches
+#### 3.1.1 multi-array approches箱线图等
 + 利用boxplot查看芯片质量
 ```{r,message=FALSE}
 library(RColorBrewer)
@@ -251,24 +251,36 @@ mtext("M", 2, outer = T)
 mtext("A", 1, outer = T)
 ```
 
+那些loess曲线震荡的，或者M值变化波动较大的，都可以被认为是质量不佳的芯片。
+
 ### 3.2 (`Simpleaffy`包)Affymetrix quality assessment metrics
 
 qc函数返回：
 + Average Background
 + scale factor: normalize的时候每一个array乘上的乘数;准则是，彼此之间3fold以内
 + Percent present：Percentage probesets
-+ 3' to 5' ratios:genechip有许多RNA quality control genes，因此这个比例可以作为RNA quality的衡量手段。
++ 3' to 5' ratios:genechip有许多RNA quality control genes，A ctin和GAPDH，因此这个比例可以作为RNA quality的衡量手段。
 
 ```{r,message=FALSE}
 library(simpleaffy)
 data.qc <- qc(data)
-data.qc@average.background  # average background
+data.qc@average.background  
+# average background应该互相可比较，f的值太大
+
 data.qc@scale.factors #scaled factors,f有问题
-data.qc@percent.present
-ratios(data.qc)[,1:2]
+
+data.qc@percent.present #极端值都会有很大可能是质量不佳的芯片
+ratios(data.qc)[,1:2] # 超过阈值3就会很危险
 ```
 
 ### 3.3 RNA degradation
+```{r}
+RNAdeg <- AffyRNAdeg(data)
+plotAffyRNAdeg(RNAdeg, cols = 1:8)
+summaryAffyRNAdeg(RNAdeg)
+```
+
+理想状态下斜率应该相似
 
 ### 3.4 using packages affyPLM
 
@@ -340,6 +352,7 @@ NUSE(Pset, main = "NUSE for Dilution dataset")
 NUSE(Pset, type = "stats")
 ```
 
+The advantage that PLM based assessments have over the Affymetrix quality standards is that they are directly related to the quality of the expression measures produced
 
 
 
@@ -351,7 +364,172 @@ NUSE(Pset, type = "stats")
 
 
 
+ 
 
+
+## 4. check and adjust/remove  the batch effect
+### 4.1 `pvca`包
+
+```{r}
+library(pvca)
+library(golubEsets)
+data(Golub_Merge)
+pct_threshold <- 0.6
+batch.factors <- c("ALL.AML", "BM.PB", "Source")
+pvcaObj <- pvcaBatchAssess(Golub_Merge, batch.factors, pct_threshold)
+bp <- barplot(pvcaObj$dat,  xlab = "Effects",
+       ylab = "Weighted average proportion variance", ylim= c(0,1.1),
+       col = c("blue"), las=2, main="PVCA estimation bar chart")
+
+axis(1, at = bp, labels = pvcaObj$label, xlab = "Effects", cex.axis = 0.5, las=2)
+values = pvcaObj$dat
+new_values = round(values , 3)
+text(bp,pvcaObj$dat,labels = new_values, pos=3, cex = 0.8) 
+
+```
+
+#### 4.2 `gPCA`包
+
+```{r}
+library(gPCA)
+data(caseDat)
+batch <- caseDat$batch
+data <- caseDat$data
+out<-gPCA.batchdetect(x=data,batch=batch,center=TRUE)
+out$delta
+out$p.val
+((out$varPCg1-out$varPCu1)/out$varPCg1)*100
+gDist(out)
+par(mai=c(0.8,0.8,0.1,0.1),cex=0.8)
+PCplot(out,ug="guided",type="1v2")
+
+par(mai=c(0.65,0.65,0.1,0.1),cex=0.8)
+PCplot(out,ug="guided",type="comp",npcs=3)
+```
+
+若p值显著，则认为存在batch effect
+
+
+
+### 4.3 `SVA`包:adjust for the bathc effect using ComBat function(经验贝叶斯方法)
+何谓batch effect呢？
+可以理解为一个试验中不同样本之间由于不同实验人员操作，或者是使用不同试剂以及环境所导致的差异；这种effect可以通过一些可视化形式来有一个直观的感受。
+
+同样可能存在未知的latent variable,会对结果有一定的影响。
+```{r echo=FALSE}
+library(sva)
+library(bladderbatch)
+library(pamr)
+library(limma)
+data(bladderdata)
+```
+
+这批膀胱癌的数据，我们感兴趣的变量是癌症的级别；
+```{r}
+pheno <- pData(bladderEset)
+head(pheno)
+edata <- exprs(bladderEset)
+```
+
+#### 设计矩阵
+full model: adjustment variables and variables of interest
+null model: all adjustment variables but not the variabes of interest
+
+接下来定义full model矩阵，这里是只有variables of interest
+```{r}
+mod <- model.matrix(~as.factor(cancer), data = pheno)
+```
+
+而null model应该是只包含adjust variable，因为我们没有其他变量，所以这里只有一个intercept
+```{r}
+mod0 <- model.matrix(~1, data = pheno)
+```
+
+#### `sva` function
+首先，估计需要引入的latent factor的个数;
+```{r}
+n.sv <- num.sv(edata, mod, method = "leek")
+n.sv
+```
+
+接着，估计surrogate variables:
+```{r}
+svobj <- sva(edata, mod, mod0, n.sv = n.sv)
+str(svobj)
+```
+
+其中sv表示的是一个矩阵，它是$57/times2$的矩阵;每一列就是代表一个surrogate variables;
+
+pprob.gam is the posterior probability that each gene is associated with
+one or more latent variables . 
+pprob.b is the posterior probability that each gene is associated with
+the variables of interest
+```{r}
+dim(svobj$sv)
+head(svobj$sv)
+summary(svobj$pprob.gam)
+summary(svobj$pprob.b)
+```
+
+#### adjusting for surrogate variables using the `f.pvalue` function
+
+```{r}
+pValues <- f.pvalue(edata, mod, mod0)
+qvalues <- p.adjust(pValues, method = "BH")
+```
+
+接下来考虑surrogate variables
+我们将sv当做adjustment variables同时放入两个模型中
+```{r}
+modSv <- cbind(mod, svobj$sv)
+mod0Sv <- cbind(mod0, svobj$sv)
+pValuesSv <- f.pvalue(edata, modSv, mod0Sv)
+qvaluesSv <- p.adjust(pValuesSv, method = "BH")
+```
+
+
+#### 结合limma包
+```{r}
+fit <- lmFit(edata, modSv)
+```
+We do not include the surrogate variables in the contrasts, since they are only being used to adjust the analysis.
+
+```{r}
+contrast.matrix <- cbind("C1"=c(-1,1,0,rep(0,svobj$n.sv)),"C2"=c(0,-1,1,rep(0,svobj$n.sv)),"C3"=c(-1,0,1,rep(0,svobj$n.sv)))
+fitContrasts = contrasts.fit(fit,contrast.matrix)
+eb <- eBayes(fitContrasts)
+topTableF(eb, adjust="BH")
+```
+
+
+#### `combat`函数 adjust for known batches
+
+这里假设数据已经清洗并且normalize了
+```{r}
+batch <- pheno$batch
+modcombat <- model.matrix(~1, data = pheno)
+combat_edata = ComBat(dat=edata, batch=batch, mod=modcombat, 
+                      par.prior=TRUE, prior.plots=T)
+```
+
+上面的输出结果是一个新的表达量矩阵，已经adjust了batch；
+
+```{r}
+pValueCombat <- f.pvalue(combat_edata,mod,mod0)
+qvaluesCombat <- p.adjust(pValueCombat, method = "BH")
+```
+
+#### removing known batch effects with a linear model
+
+```{r, message=FALSE}
+modBatch = model.matrix(~as.factor(cancer) + as.factor(batch),data=pheno)
+mod0Batch = model.matrix(~as.factor(batch),data=pheno)
+pValuesBatch = f.pvalue(edata,modBatch,mod0Batch)
+qValuesBatch = p.adjust(pValuesBatch,method="BH")
+```
+
+## 5. Aggregate any technical replicates
+## 6. check the prepocessing expression values from multiple platform are compatible
 
 
 ## 实践：利用affy包进行preprocessing
@@ -370,6 +548,7 @@ express.summary.stat.methods()
 
 1.读取路径中的所有cel文件
 ```{r}
+library(affy)
 pwd <- "E:/生物统计/meta-analysis/testdata/1332168401_copd_CELfiles/copd_data"
 rawdata <- ReadAffy(celfile.path = pwd)
 ```
@@ -425,6 +604,9 @@ eset@assayData$exprs[1:5,1:5]
 
 ```{r}
 MAplot(rawdata, pairs = T, plot.method = "smoothScatter")
+library(affyPLM)
+fit<-fitPLM(rawdata)
+RLE(fit)
 ```
 
 
@@ -518,4 +700,11 @@ Index$`100_g_at`
 pmindex(Dilution, genenames = c("1000_at", "1001_at"))
 ```
 
-+ jjkasj
+
+
+
+
+
+
+
+## limma包
